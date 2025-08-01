@@ -1,10 +1,15 @@
 # Core functionalities for Gamified Creativity
 
-def code_to_art(code_input: str, art_type: str = "visual") -> dict:
+import random # Added missing import for random
+
+def code_to_art(code_input: str, art_type: str = "visual", art_params: dict = None) -> dict:
     """Transforms code into artistic output (visuals or music).
-    This version generates more nuanced outputs based on specific code patterns.
+    This version generates more nuanced outputs based on specific code patterns and customizable art parameters.
     """
     print(f"Generating {art_type} art from code.")
+
+    if art_params is None:
+        art_params = {"color": "blue", "tempo": 120, "shape": "circle"} # Default parameters
 
     art_output = ""
     complexity = len(code_input.replace('\n', '')) # Simple complexity measure
@@ -13,35 +18,39 @@ def code_to_art(code_input: str, art_type: str = "visual") -> dict:
     has_loop = "for " in code_input.lower() or "while " in code_input.lower()
     has_conditional = "if " in code_input.lower() or "else" in code_input.lower()
     has_recursion = "def " in code_input.lower() and ("(" + code_input.split("def ")[-1].split("(")[0] + "(") in code_input # Basic heuristic
+    num_functions = code_input.lower().count("def ")
+    num_lines = len(code_input.split('\n'))
+
+    # Dynamic adjustment of art_params based on code properties (simplified heuristics)
+    if has_loop:
+        art_params['tempo'] = 180 # Faster tempo for loops
+        art_params['shape'] = "spiral" # Spirals for loops
+    if has_conditional:
+        art_params['color'] = "green" if random.random() > 0.5 else "red" # Conditional color changes
+    if has_recursion:
+        art_params['shape'] = "fractal" # Fractals for recursion
+    
+    if num_functions > 3:
+        art_params['visual_density'] = "high" # More complex visuals for many functions
+    if num_lines > 50:
+        art_params['intensity'] = "high" # Higher intensity for longer code
 
     if art_type.lower() == "visual":
-        if has_loop and has_conditional:
-            art_output = "# Dynamic, branching fractal animation (simulated visual)"
-        elif has_loop:
-            art_output = "# Repeating, evolving geometric patterns (simulated visual)"
-        elif has_conditional:
-            art_output = "# Abstract art with distinct sections and transitions (simulated visual)"
-        elif has_recursion:
-            art_output = "# Self-similar, intricate recursive patterns (simulated visual)"
-        elif complexity < 50:
-            art_output = "# Simple geometric pattern (simulated visual)"
+        if art_params.get('shape') == "fractal":
+            art_output = "# Self-similar, intricate recursive fractal pattern (simulated visual)"
+        elif art_params.get('shape') == "spiral":
+            art_output = "# Evolving spiral geometric pattern (simulated visual)"
         else:
-            art_output = "# Complex abstract visual (simulated visual)"
-        return {"status": "success", "art_output": art_output, "type": "visual"}
+            art_output = f"# Abstract visual with {art_params.get('color')} tones and {art_params.get('shape')} shapes (simulated visual)"
+        return {"status": "success", "art_output": art_output, "type": "visual", "art_parameters": art_params}
     elif art_type.lower() == "music":
-        if has_loop and has_conditional:
-            art_output = "# Interweaving melodies with dynamic changes (simulated music)"
-        elif has_loop:
-            art_output = "# Repetitive, evolving rhythmic patterns (simulated music)"
-        elif has_conditional:
-            art_output = "# Music with distinct sections and unexpected transitions (simulated music)"
-        elif has_recursion:
-            art_output = "# Self-referential, layered musical phrases (simulated music)"
-        elif complexity < 50:
-            art_output = "# Simple melody with few notes (simulated music)"
+        if art_params.get('tempo') == 180:
+            art_output = "# Fast-paced, repetitive melodic sequence (simulated music)"
+        elif art_params.get('color') == "green": # Simulating color affecting music feel
+            art_output = "# Uplifting, harmonic musical piece (simulated music)"
         else:
-            art_output = "# Procedural ambient soundscape (simulated music)"
-        return {"status": "success", "art_output": art_output, "type": "music"}
+            art_output = f"# Procedural ambient soundscape with tempo {art_params.get('tempo')} (simulated music)"
+        return {"status": "success", "art_output": art_output, "type": "music", "art_parameters": art_params}
     else:
         return {"status": "error", "message": "Unsupported art type."}
 
@@ -86,7 +95,8 @@ def enter_sandbox_mode(player_id: str, environment_theme: str = "default", unloc
 
 def create_mini_game(player_id: str, game_concept: dict) -> dict:
     """Allows players to define and build simple mini-games using in-game coding tools.
-    This version generates game elements and logic based on the provided concept and includes a basic validation.
+    This version generates game elements and logic based on the provided concept, includes validation,
+    and simulates a basic game testing process with a performance report.
     """
     game_title = game_concept.get('title', 'Untitled Mini-Game')
     game_type = game_concept.get('type', 'puzzle').lower()
@@ -97,6 +107,8 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
     generated_logic_modules = []
     validation_status = "success"
     validation_messages = []
+    test_results = {} # New: for simulated game testing
+    performance_report = {} # New: for simulated performance
 
     # Simulate basic logic validation: check for key components based on game type
     if game_type == "puzzle":
@@ -107,6 +119,15 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
         if "solve_puzzle" not in player_provided_logic.lower():
             validation_status = "warning"
             validation_messages.append("Puzzle game logic might be missing a clear solve condition.")
+        
+        # Simulated testing for puzzle
+        if "correct_sequence" in player_provided_logic.lower():
+            test_results["puzzle_test_1"] = {"passed": True, "message": "Solved basic puzzle!"}
+            performance_report["efficiency"] = "high"
+        else:
+            test_results["puzzle_test_1"] = {"passed": False, "message": "Failed to solve basic puzzle."}
+            performance_report["efficiency"] = "low"
+
     elif game_type == "platformer":
         generated_elements.append("platforms")
         generated_elements.append("player_character")
@@ -115,6 +136,15 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
         if "character.jump" not in player_provided_logic.lower():
             validation_status = "warning"
             validation_messages.append("Platformer game logic might be missing jump mechanics.")
+        
+        # Simulated testing for platformer
+        if "jump_height" in player_provided_logic.lower() and "move_speed" in player_provided_logic.lower():
+            test_results["platformer_test_1"] = {"passed": True, "message": "Character moves and jumps!"}
+            performance_report["smoothness"] = "good"
+        else:
+            test_results["platformer_test_1"] = {"passed": False, "message": "Movement or jump logic incomplete."}
+            performance_report["smoothness"] = "poor"
+
     elif game_type == "shooter":
         generated_elements.append("enemies")
         generated_elements.append("projectiles")
@@ -123,6 +153,15 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
         if "fire_projectile" not in player_provided_logic.lower():
             validation_status = "warning"
             validation_messages.append("Shooter game logic might be missing projectile firing mechanics.")
+        
+        # Simulated testing for shooter
+        if "enemy.take_damage" in player_provided_logic.lower() and "fire_rate" in player_provided_logic.lower():
+            test_results["shooter_test_1"] = {"passed": True, "message": "Projectiles hit enemies!"}
+            performance_report["responsiveness"] = "excellent"
+        else:
+            test_results["shooter_test_1"] = {"passed": False, "message": "Shooting or damage logic incomplete."}
+            performance_report["responsiveness"] = "bad"
+
     else:
         generated_elements.append("basic_elements")
         generated_logic_modules.append("basic_game_loop")
@@ -130,12 +169,27 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
             validation_status = "warning"
             validation_messages.append("Generic mini-game has no player-provided logic.")
 
-    game_id = f"mg_{hash(f'{player_id}-{game_title}-{hash(str(import random; random.random()))}') & 0xFFFFFFFF}"
+    # Simulate bug detection based on common issues
+    if "while True" in player_provided_logic or "infinite_loop" in player_provided_logic.lower():
+        validation_status = "error" # Critical error
+        validation_messages.append("Critical Error: Detected a potential infinite loop. This will crash the game!")
+        test_results["infinite_loop_check"] = {"passed": False, "message": "Infinite loop detected."}
+        performance_report["stability"] = "very_poor"
+    
+    # Overall status based on validation and testing
+    if validation_status == "success" and all(test['passed'] for test in test_results.values()):
+        final_status = "ready_to_publish"
+    elif validation_status == "warning" or any(not test['passed'] for test in test_results.values()):
+        final_status = "needs_refinement"
+    else:
+        final_status = "critical_errors"
 
-    print(f"Player {player_id} creating a {game_type} mini-game: {game_title}. Validation: {validation_status}.")
+    game_id = f"mg_{hash(f'{player_id}-{game_title}-{random.random()}') & 0xFFFFFFFF}"
+
+    print(f"Player {player_id} creating a {game_type} mini-game: {game_title}. Final Status: {final_status}.")
     # Placeholder for a mini-game construction kit that translates code to game logic
     return {
-        "status": "success" if validation_status != "error" else "error",
+        "status": final_status,
         "game_id": game_id,
         "title": game_title,
         "type": game_type,
@@ -144,5 +198,7 @@ def create_mini_game(player_id: str, game_concept: dict) -> dict:
         "generated_logic_modules": generated_logic_modules,
         "player_id": player_id,
         "validation_status": validation_status,
-        "validation_messages": validation_messages
+        "validation_messages": validation_messages,
+        "test_results": test_results, # New: simulated test results
+        "performance_report": performance_report # New: simulated performance report
     } 
