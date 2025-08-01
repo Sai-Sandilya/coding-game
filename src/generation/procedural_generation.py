@@ -71,16 +71,20 @@ def generate_quest(player_skill_level: float, concept_focus: str = None, story_p
         "reward": {"exp": 100, "item": "Logic Gem"}
     }
 
-def generate_world_segment(theme: str, difficulty: float, environment_type: str = "forest") -> dict:
-    """Generates a segment of the game world with a specific coding theme, difficulty, and environment type.
-    This version generates more detailed world elements, puzzles, and interactive NPCs.
+def generate_world_segment(theme: str, difficulty: float, environment_type: str = "forest", dynamic_events: list = None) -> dict:
+    """Generates a segment of the game world with a specific coding theme, difficulty, environment, and dynamic events.
+    This version generates more detailed world elements, puzzles, interactive NPCs, and environmental effects.
     """
-    segment_id = f"ws_{hash(f'{theme}-{difficulty}-{environment_type}-{hash(str(random.random()))}') & 0xFFFFFFFF}" # Unique ID
+    if dynamic_events is None:
+        dynamic_events = []
+
+    segment_id = f"ws_{hash(f'{theme}-{difficulty}-{environment_type}-{str(dynamic_events)}-{hash(str(random.random()))}') & 0xFFFFFFFF}" # Unique ID
     
     elements = []
     puzzles = []
     npcs = []
     interactive_objects = []
+    environmental_effects = [] # New: environmental effects
 
     # Define elements based on theme and environment
     if theme.lower() == "loops":
@@ -119,59 +123,75 @@ def generate_world_segment(theme: str, difficulty: float, environment_type: str 
     # Add general environment elements
     if environment_type == "forest":
         elements.extend(["dense_foliage", "ancient_trees"])
+        if "rain_storm" in dynamic_events:
+            environmental_effects.append("heavy_rain")
+            environmental_effects.append("muddy_paths_affect_movement")
     elif environment_type == "desert":
         elements.extend(["scorching_sands", "rock_formations"])
+        if "sand_storm" in dynamic_events:
+            environmental_effects.append("blinding_sandstorm")
+            environmental_effects.append("reduced_visibility")
     elif environment_type == "mountains":
         elements.extend(["craggy_peaks", "hidden_caves"])
+        if "rockfall" in dynamic_events:
+            environmental_effects.append("falling_boulders")
+            environmental_effects.append("blocked_paths")
 
-    print(f"Generated world segment {segment_id} with theme: {theme}, difficulty: {difficulty}, environment: {environment_type}.")
+    print(f"Generated world segment {segment_id} with theme: {theme}, difficulty: {difficulty}, environment: {environment_type}. Events: {len(dynamic_events)}.")
 
     return {
         "status": "success",
         "segment_id": segment_id,
         "theme": theme,
         "difficulty": difficulty,
-        "environment_type": environment_type, # New: explicitly state environment
+        "environment_type": environment_type,
         "elements": elements,
         "puzzles": puzzles,
         "npcs": npcs,
-        "interactive_objects": interactive_objects, # New: interactive elements
-        "description": f"A {environment_type} themed area, with {len(puzzles)} coding puzzles to solve and {len(interactive_objects)} interactive elements."
+        "interactive_objects": interactive_objects,
+        "environmental_effects": environmental_effects, # New: environmental effects
+        "description": f"A {environment_type} themed area, with {len(puzzles)} coding puzzles to solve and {len(interactive_objects)} interactive elements, and {len(environmental_effects)} environmental effects."
     }
 
 def evolve_npc_behavior(npc_id: str, player_interaction_data: dict, current_npc_trait: str = "neutral", npc_state: dict = None) -> dict:
     """Adjusts an NPC's behavior or dialogue based on player coding interactions.
-    This version simulates trait evolution and potential changes in quest offerings or dialogue trees.
+    This version simulates trait evolution, potential changes in quest offerings/dialogue trees, and reactions to code style/ethics.
     """
     if npc_state is None:
-        npc_state = {"dialogue_tree_id": "initial", "quest_offer_id": "none"}
+        npc_state = {"dialogue_tree_id": "initial", "quest_offer_id": "none", "offered_quest_difficulty": "medium"}
 
     print(f"Evolving NPC {npc_id} with current trait '{current_npc_trait}' based on player interactions.")
     
     new_trait = current_npc_trait
     new_dialogue_tree_id = npc_state['dialogue_tree_id']
     new_quest_offer_id = npc_state['quest_offer_id']
+    new_offered_quest_difficulty = npc_state['offered_quest_difficulty']
 
     # Simulate trait evolution based on player's performance or interaction type
     interaction_type = player_interaction_data.get('type', 'unknown')
     player_performance_score = player_interaction_data.get('score', 0) # e.g., correct answers, code efficiency
+    player_code_style_quality = player_interaction_data.get('code_style_quality', 0.5) # From 0 to 1
+    player_ethical_score_change = player_interaction_data.get('ethical_score_change', 0) # From -100 to 100
 
     if interaction_type == "solved_challenge" and player_performance_score > 0.8:
         if current_npc_trait == "neutral":
             new_trait = "impressed"
             new_dialogue_tree_id = "impressed_dialogue"
             new_quest_offer_id = "advanced_challenge"
+            new_offered_quest_difficulty = "hard" # Offer harder quest
         elif current_npc_trait == "skeptical":
             new_trait = "curious"
             new_dialogue_tree_id = "curious_dialogue"
         elif current_npc_trait == "friendly":
             new_trait = "admiring"
             new_quest_offer_id = "master_quest_line"
+            new_offered_quest_difficulty = "expert" # Offer very hard quest
     elif interaction_type == "failed_challenge" and player_performance_score < 0.3:
         if current_npc_trait == "neutral":
             new_trait = "sympathetic"
             new_dialogue_tree_id = "sympathetic_dialogue"
             new_quest_offer_id = "tutorial_review"
+            new_offered_quest_difficulty = "easy" # Suggest easier content
         elif current_npc_trait == "impressed":
             new_trait = "concerned"
             new_dialogue_tree_id = "concerned_dialogue"
@@ -180,7 +200,21 @@ def evolve_npc_behavior(npc_id: str, player_interaction_data: dict, current_npc_
             new_trait = "supportive"
             new_dialogue_tree_id = "supportive_dialogue"
 
-    print(f"NPC {npc_id} evolved to new trait: {new_trait}. New dialogue: {new_dialogue_tree_id}. New quest offer: {new_quest_offer_id}.")
+    # NPC reaction to code style
+    if player_code_style_quality < 0.3:
+        new_dialogue_tree_id = "style_critique_dialogue" # NPC comments on bad style
+    elif player_code_style_quality > 0.8:
+        new_dialogue_tree_id = "style_praise_dialogue" # NPC praises good style
+
+    # NPC reaction to ethical choices
+    if player_ethical_score_change < -20:
+        new_trait = "disapproving"
+        new_dialogue_tree_id = "ethical_warning_dialogue"
+    elif player_ethical_score_change > 20:
+        new_trait = "approving"
+        new_dialogue_tree_id = "ethical_praise_dialogue"
+
+    print(f"NPC {npc_id} evolved to new trait: {new_trait}. New dialogue: {new_dialogue_tree_id}. New quest offer: {new_quest_offer_id} (Difficulty: {new_offered_quest_difficulty}).")
     # In a real system, this would update NPC state in the game engine.
 
-    return {"status": "success", "npc_id": npc_id, "old_trait": current_npc_trait, "new_trait": new_trait, "new_dialogue_tree_id": new_dialogue_tree_id, "new_quest_offer_id": new_quest_offer_id} 
+    return {"status": "success", "npc_id": npc_id, "old_trait": current_npc_trait, "new_trait": new_trait, "new_dialogue_tree_id": new_dialogue_tree_id, "new_quest_offer_id": new_quest_offer_id, "offered_quest_difficulty": new_offered_quest_difficulty} 
