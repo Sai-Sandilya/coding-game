@@ -5,6 +5,13 @@ import random
 # In a real game, this would be a database or a dedicated session management service.
 multiplayer_sessions = {}
 
+# Predefined duel problems for variety
+duel_problems = [
+    {"id": "p001", "title": "FizzBuzz Challenge", "description": "Write a function that prints numbers from 1 to 100. For multiples of three print 'Fizz' instead of the number and for the multiples of five print 'Buzz'. For numbers which are multiples of both three and five print 'FizzBuzz'."},
+    {"id": "p002", "title": "Palindrome Checker", "description": "Write a function that checks if a given string is a palindrome (reads the same forwards and backwards)."},
+    {"id": "p003", "title": "Array Sorter", "description": "Implement a sorting algorithm (e.g., bubble sort, quicksort) for a given array of numbers. Efficiency matters!"}
+]
+
 def create_multiplayer_session(session_id: str, host_player_id: str, max_players: int = 4) -> dict:
     """Creates a new multiplayer coding session with a specified maximum player capacity.
     Returns session details or a success/failure status.
@@ -131,9 +138,9 @@ def run_code_in_session(session_id: str, code_block: str, player_id: str) -> dic
 
     return {"status": status, "output": output, "player_id": player_id, "session_id": session_id}
 
-def start_code_duel(session_id: str, players: list, duel_problem: str = "Default coding challenge", time_limit_seconds: int = 300) -> dict:
+def start_code_duel(session_id: str, players: list, problem_id: str = None, time_limit_seconds: int = 300) -> dict:
     """Initiates a competitive code duel within a session with a defined problem and timer.
-    Manages duel state within the session.
+    Manages duel state within the session and selects a problem dynamically.
     """
     session = multiplayer_sessions.get(session_id)
     if not session:
@@ -145,10 +152,18 @@ def start_code_duel(session_id: str, players: list, duel_problem: str = "Default
     if len(players) < 2:
         return {"status": "error", "message": "At least two players are required for a duel."}
 
-    print(f"Code duel started in session {session_id} with players: {players}. Problem: {duel_problem}. Time limit: {time_limit_seconds}s.")
+    selected_problem = None
+    if problem_id:
+        selected_problem = next((p for p in duel_problems if p['id'] == problem_id), None)
+        if not selected_problem:
+            return {"status": "error", "message": f"Problem with ID {problem_id} not found."}
+    else:
+        selected_problem = random.choice(duel_problems) # Select a random problem if not specified
+
+    print(f"Code duel started in session {session_id} with players: {players}. Problem: {selected_problem['title']}. Time limit: {time_limit_seconds}s.")
     
     session['duel_active'] = True
-    session['current_problem'] = duel_problem
+    session['current_problem'] = selected_problem
     session['time_limit_seconds'] = time_limit_seconds
     session['player_scores'] = {player_id: 0 for player_id in players} # Reset scores for duel
     session['status'] = "in_duel"
@@ -158,7 +173,7 @@ def start_code_duel(session_id: str, players: list, duel_problem: str = "Default
         "status": "duel_started",
         "session_id": session_id,
         "players": players,
-        "problem": duel_problem,
+        "problem": selected_problem,
         "time_limit_seconds": time_limit_seconds,
         "current_scores": session['player_scores']
     }
@@ -176,4 +191,37 @@ def update_duel_score(session_id: str, player_id: str, points: int) -> dict:
 
     session['player_scores'][player_id] += points
     print(f"Player {player_id} in session {session_id} scored {points} points. New score: {session['player_scores'][player_id]}.")
-    return {"status": "success", "session_id": session_id, "player_id": player_id, "new_score": session['player_scores'][player_id], "current_scores": session['player_scores']} 
+    return {"status": "success", "session_id": session_id, "player_id": player_id, "new_score": session['player_scores'][player_id], "current_scores": session['player_scores']}
+
+def end_code_duel(session_id: str) -> dict:
+    """Ends an active code duel and determines the winner(s).
+    """
+    session = multiplayer_sessions.get(session_id)
+    if not session:
+        return {"status": "error", "message": f"Session {session_id} does not exist."}
+    if not session['duel_active']:
+        return {"status": "error", "message": f"No active duel to end in session {session_id}."}
+
+    session['duel_active'] = False
+    session['status'] = "ready_to_start" # Back to waiting for next activity
+
+    # Determine winner(s)
+    winning_score = -1
+    winners = []
+    if session['player_scores']:
+        winning_score = max(session['player_scores'].values())
+        winners = [player_id for player_id, score in session['player_scores'].items() if score == winning_score]
+
+    print(f"Code duel in session {session_id} ended. Winner(s): {winners or 'None'} with score: {winning_score}.")
+    
+    return {"status": "duel_ended", "session_id": session_id, "winner_ids": winners, "final_scores": session['player_scores']}
+
+def end_multiplayer_session(session_id: str) -> dict:
+    """Ends a multiplayer session and removes it from active sessions.
+    """
+    session = multiplayer_sessions.pop(session_id, None)
+    if session:
+        print(f"Multiplayer session {session_id} ended and removed.")
+        return {"status": "success", "message": f"Session {session_id} ended.", "session_id": session_id}
+    else:
+        return {"status": "error", "message": f"Session {session_id} not found."} 
