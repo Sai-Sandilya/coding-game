@@ -3,44 +3,61 @@
 def adapt_difficulty(player_performance: dict, player_model: dict = None) -> float:
     """Adjusts difficulty based on player performance metrics and a dynamic player model.
     player_performance should include keys like 'correct_answers', 'time_taken', 'hints_used', 'concept_id'.
-    player_model is a dictionary storing dynamic player attributes like 'mastery', 'learning_rate', 'difficulty_bias'.
+    player_model is a dictionary storing dynamic player attributes, including per-concept mastery and learning rates.
     """
     if player_model is None:
         player_model = {
-            'mastery': 0.5,         # Overall mastery, 0.0 to 1.0
-            'learning_rate': 0.1,   # How quickly mastery adjusts per interaction
-            'difficulty_bias': 0.0  # Personal difficulty adjustment factor (-0.5 to 0.5)
+            'global_mastery': 0.5,       # Overall mastery
+            'global_learning_rate': 0.1, # Overall learning rate
+            'difficulty_bias': 0.0,      # Personal difficulty adjustment factor
+            'concept_mastery': {}        # Per-concept mastery (concept_id: {mastery, learning_rate})
         }
     
     score = player_performance.get('correct_answers', 0)
-    time = player_performance.get('time_taken', 1)
+    time = player_performance.get('time_taken', 1) # Ensure time is not zero
     hints = player_performance.get('hints_used', 0)
     concept_id = player_performance.get('concept_id', 'general') # Default concept
 
-    # --- Update player model based on current performance ---
-    # Performance metric: Higher is better
-    performance_metric = (score * 0.2) / (time + 1) - (hints * 0.05)
-
-    # Adjust mastery: learning_rate determines how much the mastery changes
-    player_model['mastery'] += player_model['learning_rate'] * performance_metric
-    player_model['mastery'] = max(0.0, min(1.0, player_model['mastery'])) # Clamp mastery
-
-    # Adjust learning rate: good performance might slightly increase learning rate for faster adaptation
-    # Bad performance might slightly decrease it for more stable adaptation
-    if performance_metric > 0.05:
-        player_model['learning_rate'] = min(0.2, player_model['learning_rate'] + 0.005)
-    elif performance_metric < -0.05:
-        player_model['learning_rate'] = max(0.05, player_model['learning_rate'] - 0.005)
-
-    # Apply a small decay to mastery over time (simulated here per interaction)
-    decay_rate = 0.005 # Concepts decay slowly if not practiced
-    player_model['mastery'] = max(0.0, player_model['mastery'] - decay_rate)
+    # Initialize concept-specific mastery if not present
+    if concept_id not in player_model['concept_mastery']:
+        player_model['concept_mastery'][concept_id] = {
+            'mastery': player_model['global_mastery'],
+            'learning_rate': player_model['global_learning_rate']
+        }
     
+    concept_mastery_data = player_model['concept_mastery'][concept_id]
+
+    # --- Update concept-specific mastery based on current performance ---
+    performance_metric = (score * 0.2) / (time + 1) - (hints * 0.05) # Higher is better
+
+    # Adjust concept mastery
+    concept_mastery_data['mastery'] += concept_mastery_data['learning_rate'] * performance_metric
+    concept_mastery_data['mastery'] = max(0.0, min(1.0, concept_mastery_data['mastery'])) # Clamp mastery
+
+    # Adjust concept learning rate
+    if performance_metric > 0.05:
+        concept_mastery_data['learning_rate'] = min(0.2, concept_mastery_data['learning_rate'] + 0.005)
+    elif performance_metric < -0.05:
+        concept_mastery_data['learning_rate'] = max(0.05, concept_mastery_data['learning_rate'] - 0.005)
+
+    # Apply a small decay to concept mastery (simulated per interaction)
+    decay_rate = 0.005 # Concepts decay slowly if not practiced
+    concept_mastery_data['mastery'] = max(0.0, concept_mastery_data['mastery'] - decay_rate)
+
+    # --- Update global mastery (optional, as an aggregate) ---
+    # This could be an average of all concept masteries or weighted.
+    # For now, a simple update based on the current concept.
+    player_model['global_mastery'] = sum(data['mastery'] for data in player_model['concept_mastery'].values()) / len(player_model['concept_mastery']) if player_model['concept_mastery'] else 0.5
+    player_model['global_mastery'] = max(0.0, min(1.0, player_model['global_mastery']))
+
     # In a real system, player_model would be persistently stored and loaded.
 
-    # --- Determine difficulty factor based on updated player model ---
+    # --- Determine difficulty factor based on updated player model and concept mastery ---
+    # Use concept-specific mastery for difficulty, if available, otherwise global.
+    effective_mastery = concept_mastery_data['mastery'] # Use specific concept mastery
+    
     # Base difficulty from mastery: lower mastery -> easier, higher mastery -> harder
-    base_difficulty = 0.1 + (player_model['mastery'] * 1.5) # Scales from 0.1 to 1.6
+    base_difficulty = 0.1 + (effective_mastery * 1.5) # Scales from 0.1 to 1.6
 
     # Apply personal difficulty bias
     difficulty_factor = base_difficulty + player_model['difficulty_bias']
@@ -50,12 +67,12 @@ def adapt_difficulty(player_performance: dict, player_model: dict = None) -> flo
 def conversational_tutor(user_input: str, conversation_history: list = None, player_model: dict = None) -> str:
     """Simulates an AI mentor that explains concepts and debugs, with advanced context awareness and personalized responses.
     conversation_history is a list of previous (user_message, ai_response) tuples.
-    player_model is used to personalize responses based on player's mastery.
+    player_model is used to personalize responses based on player's global and concept-specific mastery.
     """
     if conversation_history is None:
         conversation_history = []
     if player_model is None:
-        player_model = {'mastery': 0.5}
+        player_model = {'global_mastery': 0.5, 'concept_mastery': {}}
 
     user_input_lower = user_input.lower()
     response = ""
@@ -69,26 +86,62 @@ def conversational_tutor(user_input: str, conversation_history: list = None, pla
             recent_topics.add("loop")
         if "conditional" in last_user_msg or "conditional" in last_ai_resp:
             recent_topics.add("conditional")
-        if "debug" in last_user_msg or "error" in last_user_msg:
+        if "debug" in last_user_msg or "error" in user_input_lower: # Check user_input for immediate debug request
             recent_topics.add("debug")
 
-    # Personalize response based on player mastery
-    mastery_level_desc = "beginner" if player_model['mastery'] < 0.4 else \
-                         "intermediate" if player_model['mastery'] < 0.7 else "advanced"
+    # Personalize response based on player's *global* mastery or a specific concept's mastery if known from context
+    effective_mastery_for_tutor = player_model.get('global_mastery', 0.5)
+    current_concept_in_focus = "general"
+    
+    if "loop" in user_input_lower or "loop" in recent_topics:
+        current_concept_in_focus = "loop"
+    elif "conditional" in user_input_lower or "conditional" in recent_topics:
+        current_concept_in_focus = "conditional"
+    elif "recursion" in user_input_lower or "recursion" in recent_topics:
+        current_concept_in_focus = "recursion"
+
+    if current_concept_in_focus != "general" and current_concept_in_focus in player_model['concept_mastery']:
+        effective_mastery_for_tutor = player_model['concept_mastery'][current_concept_in_focus]['mastery']
+
+    mastery_level_desc = "beginner" if effective_mastery_for_tutor < 0.4 else \
+                         "intermediate" if effective_mastery_for_tutor < 0.7 else "advanced"
+
+    # Dynamic examples and explanations based on effective mastery
+    examples = {
+        "loop": {
+            "beginner": "A simple 'for' loop example: `for i in range(3): print('Hello')` will print 'Hello' three times.",
+            "intermediate": "For more complex repetition, consider a 'while' loop: `count = 0; while count < 5: print(count); count += 1`.",
+            "advanced": "When optimizing, consider list comprehensions or generator expressions for concise loops."
+        },
+        "conditional": {
+            "beginner": "An 'if-else' statement: `if score > 100: print('Win') else: print('Try again')`.",
+            "intermediate": "Using 'elif' for multiple conditions: `if grade >= 90: ... elif grade >= 80: ...`.",
+            "advanced": "For complex decision trees, think about strategy pattern or polymorphism instead of deeply nested conditionals."
+        },
+        "recursion": {
+            "beginner": "Recursion is a function calling itself. Like `def countdown(n): if n > 0: print(n); countdown(n-1)`.",
+            "intermediate": "Understanding base cases is crucial to avoid infinite recursion. Recursive solutions often simplify complex problems.",
+            "advanced": "Consider memoization or dynamic programming to optimize recursive functions and avoid recomputing results."
+        },
+        "general": {
+            "beginner": "Let's start with basics. What's a variable? It's like a named box for data.",
+            "intermediate": "Functions help organize your code. They're blocks of reusable logic.",
+            "advanced": "For large projects, object-oriented programming can help manage complexity with classes and objects."
+        }
+    }
 
     # Response generation logic
     if "hello" in user_input_lower or "hi" in user_input_lower:
         response = f"Hello there, {mastery_level_desc} aspiring coder! How can I assist you on your journey through Codebound?"
     elif "loop" in user_input_lower:
-        if "loop" in recent_topics:
-            response = "Ah, loops again! Building on our last chat, remember they help repeat actions efficiently. What specific challenge are you facing with them now?"
-        else:
-            response = "A loop allows you to repeat a block of code multiple times. Think of it like a repeating spell! Do you want to try an example?"
+        current_example = examples["loop"].get(mastery_level_desc, examples["loop"]["beginner"])
+        response = f"A loop allows you to repeat a block of code. {current_example} What specific challenge are you facing?"
     elif "conditional" in user_input_lower or "if" in user_input_lower:
-        if "conditional" in recent_topics:
-            response = "We discussed conditionals earlier! They're for making decisions in code. Are you wondering about nested conditions or perhaps a different use case?"
-        else:
-            response = "Conditionals (like 'if' statements) help your code make decisions. It's like choosing which path to take based on a condition. What kind of decision are you trying to make?"
+        current_example = examples["conditional"].get(mastery_level_desc, examples["conditional"]["beginner"])
+        response = f"Conditionals help your code make decisions. {current_example} What kind of decision are you trying to make?"
+    elif "recursion" in user_input_lower:
+        current_example = examples["recursion"].get(mastery_level_desc, examples["recursion"]["beginner"])
+        response = f"Recursion is a powerful concept where a function calls itself. {current_example} Do you have a recursive problem in mind?"
     elif "debug" in user_input_lower or "error" in user_input_lower:
         if "debug" in recent_topics:
             response = "Still having trouble debugging? Let's break it down. Tell me the exact error message or what behavior you're seeing."
@@ -96,10 +149,13 @@ def conversational_tutor(user_input: str, conversation_history: list = None, pla
             response = "Debugging is like solving a puzzle to find out why your code isn't working as expected. Can you describe the error you're seeing or what you're trying to achieve?"
     elif "thanks" in user_input_lower or "thank you" in user_input_lower:
         response = f"You're most welcome, {mastery_level_desc} coder! Keep up the great work. Let me know if you need more help."
-    elif "example" in user_input_lower and "loop" in recent_topics:
-        response = "Great! Let's revisit an example. For making a character jump 5 times, you could use a 'for' loop: 'for i in range(5): character.jump()'. This repeats the 'jump()' action 5 times!"
-    elif "decision" in user_input_lower and "conditional" in recent_topics:
-        response = "If you want your character to only attack if they have enough mana, you could use: 'if character.mana > 10: character.attack()'. What kind of decision are you thinking of?"
+    elif "example" in user_input_lower:
+        # Try to provide an example for the most recent topic or the current input's concept
+        if current_concept_in_focus != "general" and current_concept_in_focus in examples:
+             current_example = examples[current_concept_in_focus].get(mastery_level_desc, examples[current_concept_in_focus]["beginner"])
+             response = f"Here's an example related to {current_concept_in_focus}: {current_example}"
+        else:
+            response = examples["general"].get(mastery_level_desc, examples["general"]["beginner"])
     else:
         response = "That's an interesting thought! Could you tell me more about what you're trying to learn or build?"
 
@@ -110,7 +166,7 @@ def conversational_tutor(user_input: str, conversation_history: list = None, pla
 
 def provide_code_style_feedback(code_snippet: str) -> str:
     """Provides feedback on code style based on simple heuristics and common Python style guidelines.
-    This is a placeholder for actual linting or AI-based analysis.
+    This version includes simulated static analysis and context-aware suggestions.
     """
     feedback_items = []
 
@@ -176,6 +232,18 @@ def provide_code_style_feedback(code_snippet: str) -> str:
                 variable_name = variable_name_match.group(1)
                 if not re.match(r'^[a-z_][a-z0-9_]*$', variable_name) and not variable_name.isupper(): # Not snake_case and not all caps (for constants)
                     feedback_items.append(f"Line {i+1}: Consider using `snake_case` for variable and function names in Python, as per PEP 8.")
+
+    # Simulated static analysis / context-aware suggestions
+    if "magic_number" in code_snippet.lower():
+        feedback_items.append("Avoid using 'magic numbers' directly in your code. Define them as named constants for better readability and maintainability.")
+    if re.search(r'(if\s+\w+\s*==\s*True)|(if\s+\w+\s*==\s*False)', code_snippet):
+        feedback_items.append("Simplify boolean comparisons: instead of `if x == True`, use `if x:`, and instead of `if x == False`, use `if not x:`.")
+    if re.search(r'try:\s*pass\s*except:', code_snippet, re.DOTALL):
+        feedback_items.append("Avoid using empty `except` blocks with `pass`. This can hide important errors. Be specific about exceptions caught or handle them appropriately.")
+    
+    # Encourage function comments/docstrings more strongly
+    if "def " in code_snippet and "\"\"\"" not in code_snippet and "'''" not in code_snippet:
+        feedback_items.append("Consider adding a docstring to your functions to explain their purpose, arguments, and return values. This is crucial for code documentation.")
 
     if not feedback_items:
         return "Your code looks good on a first pass! Keep practicing good style."
